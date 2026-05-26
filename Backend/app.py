@@ -14,7 +14,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # LOAD AI MODEL
 # =========================
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer("all-mpnet-base-v2")
 
 app = FastAPI()
 
@@ -38,8 +38,14 @@ app.add_middleware(
 # KEYWORD ATS SCORE
 # =========================
 
-def calculate_ats_score(resume_text, job_description):
+STOP_WORDS = {
+    'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by',
+    'for', 'from', 'has', 'have', 'he', 'in', 'is',
+    'it', 'its', 'of', 'on', 'or', 'that', 'the',
+    'to', 'was', 'were', 'will', 'with'
+}
 
+def calculate_ats_score(resume_text, job_description):
     resume_words = set(
         re.findall(r'\b\w+\b', resume_text.lower())
     )
@@ -48,19 +54,39 @@ def calculate_ats_score(resume_text, job_description):
         re.findall(r'\b\w+\b', job_description.lower())
     )
 
-    matched_keywords = resume_words.intersection(jd_words)
+    # Remove stop words and non-alphabet words
+    resume_words = {
+        w for w in resume_words
+        if (
+            w not in STOP_WORDS
+            and len(w) > 2
+            and w.isalpha()
+        )
+    }
 
+    jd_words = {
+        w for w in jd_words
+        if (
+            w not in STOP_WORDS
+            and len(w) > 2
+            and w.isalpha()
+        )
+    }
+
+    matched_keywords = resume_words.intersection(jd_words)
     missing_keywords = jd_words - resume_words
 
     if len(jd_words) == 0:
         score = 0
     else:
-        score = int((len(matched_keywords) / len(jd_words)) * 100)
+        score = int(
+            (len(matched_keywords) / len(jd_words)) * 100
+        )
 
     return {
         "score": score,
-        "matched_keywords": list(matched_keywords),
-        "missing_keywords": list(missing_keywords)
+        "matched_keywords": sorted(list(matched_keywords)),
+        "missing_keywords": sorted(list(missing_keywords))
     }
 
 # =========================
@@ -68,23 +94,32 @@ def calculate_ats_score(resume_text, job_description):
 # =========================
 
 def calculate_semantic_similarity(resume_text, job_description):
+    # Use sentence-level chunking, not line-level
+    import nltk
+    resume_sentences = nltk.sent_tokenize(resume_text)
+    jd_sentences = nltk.sent_tokenize(job_description)
+    
+    # Filter noise — minimum 5 words
+    resume_sentences = [s for s in resume_sentences if len(s.split()) >= 5]
+    jd_sentences = [s for s in jd_sentences if len(s.split()) >= 5]
 
-    resume_embedding = model.encode([resume_text])
-    jd_embedding = model.encode([job_description])
+    resume_embeddings = model.encode(resume_sentences)
+    jd_embeddings = model.encode(jd_sentences)
 
-    similarity = cosine_similarity(
-        resume_embedding,
-        jd_embedding
-    )[0][0]
+    similarity_matrix = cosine_similarity(resume_embeddings, jd_embeddings)
+    best_matches = similarity_matrix.max(axis=0)
 
-    score = float(
-    max(
-        0,
-        min(round(similarity * 100, 2), 100)
-    )
-)
-
-    return score
+    # Dynamic normalization — don't hardcode bounds
+    raw_score = float(best_matches.mean())
+    
+    # Scale using actual model range for this task (empirically ~0.2–0.7)
+    # Apply a sigmoid-like curve instead of linear clamp
+    import math
+    centered = (raw_score - 0.35) * 10   # center around 0.35
+    sigmoid = 1 / (1 + math.exp(-centered))
+    final_score = round(sigmoid * 100, 2)
+    
+    return final_score
 
 # =========================
 # HOME ROUTE
@@ -103,7 +138,6 @@ async def upload_resume(
     file: UploadFile = File(...),
     job_description: str = Form(...)
 ):
-
     # Read uploaded file
     contents = await file.read()
 
@@ -114,11 +148,8 @@ async def upload_resume(
 
     # Open PDF
     with pdfplumber.open(pdf_file) as pdf:
-
         for page in pdf.pages:
-
             text = page.extract_text()
-
             if text:
                 extracted_text += text + "\n"
 
@@ -131,7 +162,6 @@ async def upload_resume(
     # =========================
     # ATS SCORE
     # =========================
-
     ats_result = calculate_ats_score(
         extracted_text,
         job_description
@@ -140,7 +170,6 @@ async def upload_resume(
     # =========================
     # AI SEMANTIC SCORE
     # =========================
-
     semantic_score = calculate_semantic_similarity(
         extracted_text,
         job_description
@@ -149,7 +178,6 @@ async def upload_resume(
     # =========================
     # RESPONSE
     # =========================
-
     return {
         "filename": file.filename,
         "text": extracted_text,
