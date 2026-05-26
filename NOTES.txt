@@ -1,0 +1,12 @@
+python -m venv venv (The Creation)
+This command tells Python to create a brand-new, isolated folder named venv inside your current project directory.
+What it contains: A clean copy of the Python executable and its own independent pip (the package installer).
+
+venv\Scripts\activate (The Activation)
+This command (used on Windows) tells your command prompt or terminal to start using the Python and pip that live inside that new venv folder, instead of the global ones installed on your computer.
+
+Packages	        Why
+FastAPI	            API server
+uvicorn	            runs backend
+python-multipart	file upload
+pdfplumber	        PDF text extraction
