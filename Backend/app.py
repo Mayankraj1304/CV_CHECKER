@@ -1,7 +1,20 @@
+# backend/app.py
+
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import pdfplumber
 import io
+import re
+
+# AI Libraries
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# =========================
+# LOAD AI MODEL
+# =========================
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 app = FastAPI()
 
@@ -22,22 +35,23 @@ app.add_middleware(
 )
 
 # =========================
-# ATS SCORE FUNCTION
+# KEYWORD ATS SCORE
 # =========================
 
 def calculate_ats_score(resume_text, job_description):
 
-    # Convert both texts to lowercase
-    resume_words = set(resume_text.lower().split())
-    jd_words = set(job_description.lower().split())
+    resume_words = set(
+        re.findall(r'\b\w+\b', resume_text.lower())
+    )
 
-    # Find matched keywords
+    jd_words = set(
+        re.findall(r'\b\w+\b', job_description.lower())
+    )
+
     matched_keywords = resume_words.intersection(jd_words)
 
-    # Find missing keywords
     missing_keywords = jd_words - resume_words
 
-    # Calculate ATS Score
     if len(jd_words) == 0:
         score = 0
     else:
@@ -48,6 +62,29 @@ def calculate_ats_score(resume_text, job_description):
         "matched_keywords": list(matched_keywords),
         "missing_keywords": list(missing_keywords)
     }
+
+# =========================
+# AI SEMANTIC SIMILARITY
+# =========================
+
+def calculate_semantic_similarity(resume_text, job_description):
+
+    resume_embedding = model.encode([resume_text])
+    jd_embedding = model.encode([job_description])
+
+    similarity = cosine_similarity(
+        resume_embedding,
+        jd_embedding
+    )[0][0]
+
+    score = float(
+    max(
+        0,
+        min(round(similarity * 100, 2), 100)
+    )
+)
+
+    return score
 
 # =========================
 # HOME ROUTE
@@ -67,37 +104,57 @@ async def upload_resume(
     job_description: str = Form(...)
 ):
 
-    # Read uploaded PDF file
+    # Read uploaded file
     contents = await file.read()
 
-    # Convert bytes into file-like object
+    # Convert bytes into file object
     pdf_file = io.BytesIO(contents)
 
     extracted_text = ""
 
-    # Open PDF using pdfplumber
+    # Open PDF
     with pdfplumber.open(pdf_file) as pdf:
 
-        # Loop through all pages
         for page in pdf.pages:
 
-            # Extract text from page
             text = page.extract_text()
 
             if text:
                 extracted_text += text + "\n"
 
-    # Calculate ATS Score
+    # Handle empty extraction
+    if extracted_text.strip() == "":
+        return {
+            "error": "No text could be extracted from PDF"
+        }
+
+    # =========================
+    # ATS SCORE
+    # =========================
+
     ats_result = calculate_ats_score(
         extracted_text,
         job_description
     )
 
-    # Return response
+    # =========================
+    # AI SEMANTIC SCORE
+    # =========================
+
+    semantic_score = calculate_semantic_similarity(
+        extracted_text,
+        job_description
+    )
+
+    # =========================
+    # RESPONSE
+    # =========================
+
     return {
         "filename": file.filename,
         "text": extracted_text,
         "ats_score": ats_result["score"],
+        "semantic_score": semantic_score,
         "matched_keywords": ats_result["matched_keywords"],
         "missing_keywords": ats_result["missing_keywords"]
     }

@@ -1,3 +1,5 @@
+// frontend/src/App.jsx
+
 import { useState, useEffect } from "react";
 import axios from "axios";
 
@@ -7,6 +9,8 @@ function App() {
   const [response, setResponse] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [jobDescription, setJobDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // =========================
   // LOAD SAVED THEME
@@ -37,7 +41,7 @@ function App() {
   }, [darkMode]);
 
   // =========================
-  // HANDLE FILE CHANGE
+  // FILE CHANGE
   // =========================
 
   const handleFileChange = (event) => {
@@ -51,12 +55,12 @@ function App() {
   const handleUpload = async () => {
 
     if (!file) {
-      alert("Please select a resume file");
+      alert("Please select a PDF resume");
       return;
     }
 
     if (!jobDescription) {
-      alert("Please enter job description");
+      alert("Please enter a job description");
       return;
     }
 
@@ -67,6 +71,9 @@ function App() {
 
     try {
 
+      setLoading(true);
+      setError("");
+
       const res = await axios.post(
         "http://127.0.0.1:8000/upload",
         formData
@@ -75,7 +82,17 @@ function App() {
       setResponse(res.data);
 
     } catch (error) {
+
       console.log(error);
+
+      setError(
+        "Something went wrong while analyzing the resume."
+      );
+
+    } finally {
+
+      setLoading(false);
+
     }
   };
 
@@ -99,9 +116,7 @@ function App() {
         }`}
       >
 
-        {/* ========================= */}
         {/* HEADER */}
-        {/* ========================= */}
 
         <div className="flex justify-between items-center mb-8">
 
@@ -123,7 +138,7 @@ function App() {
 
           </div>
 
-          {/* THEME TOGGLE */}
+          {/* THEME BUTTON */}
 
           <button
             onClick={() => setDarkMode(!darkMode)}
@@ -139,9 +154,7 @@ function App() {
 
         </div>
 
-        {/* ========================= */}
-        {/* UPLOAD SECTION */}
-        {/* ========================= */}
+        {/* INPUT SECTION */}
 
         <div
           className={`border-2 border-dashed rounded-2xl p-8 transition-all duration-500
@@ -176,6 +189,7 @@ function App() {
 
           <input
             type="file"
+            accept=".pdf"
             onChange={handleFileChange}
             className={`mb-4 block w-full text-sm
             ${
@@ -201,27 +215,36 @@ function App() {
             </p>
           )}
 
-          {/* UPLOAD BUTTON */}
+          {/* BUTTON */}
 
           <button
             onClick={handleUpload}
+            disabled={loading}
             className={`px-6 py-3 rounded-xl font-semibold transition duration-300 shadow-lg
             ${
               darkMode
                 ? "bg-blue-600 hover:bg-blue-500 text-white"
                 : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
+            }
+            ${loading ? "opacity-50 cursor-not-allowed" : ""}
+            `}
           >
-            Upload Resume
+            {loading ? "Analyzing..." : "Upload Resume"}
           </button>
+
+          {/* ERROR MESSAGE */}
+
+          {error && (
+            <p className="text-red-500 mt-4 font-medium">
+              {error}
+            </p>
+          )}
 
         </div>
 
-        {/* ========================= */}
-        {/* RESPONSE SECTION */}
-        {/* ========================= */}
+        {/* RESPONSE */}
 
-        {response && (
+        {response && !response.error && (
 
           <div className="mt-8">
 
@@ -238,7 +261,7 @@ function App() {
                 Resume Analysis
               </h2>
 
-              {/* FILENAME */}
+              {/* FILE NAME */}
 
               <p className="mb-6">
                 <strong>Filename:</strong> {response.filename}
@@ -249,7 +272,7 @@ function App() {
               <div className="mb-8">
 
                 <h3 className="text-xl font-bold mb-3">
-                  ATS Score
+                  ATS Keyword Score
                 </h3>
 
                 <div className="w-full bg-gray-300 rounded-full h-7 overflow-hidden">
@@ -257,10 +280,33 @@ function App() {
                   <div
                     className="bg-green-500 h-7 flex items-center justify-center text-white text-sm font-bold"
                     style={{
-                      width: `${response.ats_score}%`
+                      width: `${Math.min(response.ats_score, 100)}%`
                     }}
                   >
                     {response.ats_score}%
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* AI SCORE */}
+
+              <div className="mb-8">
+
+                <h3 className="text-xl font-bold mb-3">
+                  AI Semantic Match Score
+                </h3>
+
+                <div className="w-full bg-gray-300 rounded-full h-7 overflow-hidden">
+
+                  <div
+                    className="bg-blue-500 h-7 flex items-center justify-center text-white text-sm font-bold"
+                    style={{
+                      width: `${Math.min(response.semantic_score, 100)}%`
+                    }}
+                  >
+                    {response.semantic_score}%
                   </div>
 
                 </div>
@@ -277,7 +323,7 @@ function App() {
 
                 <div className="flex flex-wrap gap-2">
 
-                  {response.matched_keywords.map((skill, index) => (
+                  {response?.matched_keywords?.map((skill, index) => (
 
                     <span
                       key={index}
@@ -302,7 +348,7 @@ function App() {
 
                 <div className="flex flex-wrap gap-2">
 
-                  {response.missing_keywords.map((skill, index) => (
+                  {response?.missing_keywords?.map((skill, index) => (
 
                     <span
                       key={index}
@@ -338,6 +384,16 @@ function App() {
 
             </div>
 
+          </div>
+
+        )}
+
+        {/* PDF ERROR */}
+
+        {response?.error && (
+
+          <div className="mt-6 text-red-500 font-semibold">
+            {response.error}
           </div>
 
         )}
