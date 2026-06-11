@@ -4,6 +4,8 @@ import Header from "./components/Header";
 import InputSection from "./components/InputSection";
 import AnalysisResult from "./components/AnalysisResult";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 function App() {
   const [file, setFile] = useState(null);
   const [response, setResponse] = useState(null);
@@ -36,8 +38,7 @@ function App() {
     try {
       setLoading(true);
       setError("");
-      // Ideally, base URLs should come from a .env file on the frontend too!
-      const res = await axios.post("http://127.0.0.1:8000/upload", formData);
+      const res = await axios.post(`${API_URL}/upload`, formData);
       setResponse(res.data);
     } catch (err) {
       console.error(err);

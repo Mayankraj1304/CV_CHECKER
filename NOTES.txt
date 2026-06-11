@@ -11,5 +11,5 @@ uvicorn	            runs backend
 python-multipart	file upload
 pdfplumber	        PDF text extraction
 
-python -m uvicorn app.main:app --reload
+l --reload
 to run backend server

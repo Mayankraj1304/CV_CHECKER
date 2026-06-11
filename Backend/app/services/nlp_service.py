@@ -2,14 +2,7 @@ import re
 import math
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-import nltk
 from app.config import settings
-
-# Download NLTK data quietly if not present
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', quiet=True)
 
 # Initialize model based on configuration
 model = SentenceTransformer(settings.MODEL_NAME)
@@ -20,6 +13,9 @@ STOP_WORDS = {
     'it', 'its', 'of', 'on', 'or', 'that', 'the',
     'to', 'was', 'were', 'will', 'with'
 }
+
+def split_sentences(text: str) -> list[str]:
+    return [sentence.strip() for sentence in re.split(r'(?<=[.!?])\s+', text) if sentence.strip()]
 
 def calculate_ats_score(resume_text: str, job_description: str) -> dict:
     resume_words = set(re.findall(r'\b\w+\b', resume_text.lower()))
@@ -40,8 +36,8 @@ def calculate_ats_score(resume_text: str, job_description: str) -> dict:
     }
 
 def calculate_semantic_similarity(resume_text: str, job_description: str) -> float:
-    resume_sentences = nltk.sent_tokenize(resume_text)
-    jd_sentences = nltk.sent_tokenize(job_description)
+    resume_sentences = split_sentences(resume_text)
+    jd_sentences = split_sentences(job_description)
     
     resume_sentences = [s for s in resume_sentences if len(s.split()) >= 5]
     jd_sentences = [s for s in jd_sentences if len(s.split()) >= 5]
